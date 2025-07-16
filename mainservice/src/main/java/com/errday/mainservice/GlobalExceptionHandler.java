@@ -1,5 +1,7 @@
 package com.errday.mainservice;
 
+import com.errday.mainservice.mail.MailSendException;
+import com.errday.mainservice.payment.PaymentServiceErrorException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +18,13 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body("메일 전송 실패: " + exception.getMessage());
+    }
+
+    @ExceptionHandler(PaymentServiceErrorException.class)
+    public ResponseEntity<String> handlePaymentServiceErrorException(PaymentServiceErrorException ex) {
+        log.error("결제 서비스 오류 발생", ex);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("결제 서비스 오류: " + ex.getMessage());
     }
 
     @ExceptionHandler(Exception.class)

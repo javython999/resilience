@@ -1,2 +1,6 @@
 server:
   port: 8081
+  tomcat:
+    threads:
+      max: 3
+    accept-count: 230

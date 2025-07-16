@@ -4,6 +4,7 @@ import com.errday.mailservice.exception.InvalidEmailException;
 import com.errday.mailservice.exception.RetryableException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,7 @@ public class MailSenderService {
     @Retryable(
             retryFor = {RetryableException.class}, // 재시도할 예외 유형
             maxAttempts = 3,    // 최대 재시도 횟수
+            backoff = @Backoff(delay = 2000),
             //backoff = @Backoff(delay = 1000, multiplier = 2) // 첫 재시도: 1초, 이후 2배씩 증가
             listeners = {"loggingRetryListener"} // 재시도에 대한 Listener 지정
     )

@@ -1,4 +1,4 @@
-package com.errday.mainservice;
+package com.errday.mainservice.mail;
 
 public class MailSendException extends RuntimeException {
 
