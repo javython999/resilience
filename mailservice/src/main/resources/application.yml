@@ -26,3 +26,13 @@ spring:
 
         # 값 타입 지정
         spring.json.value.default.type: com.errday.mailservice.mail.EmailRequest # 컨슈머가 최종적으로 변환할 타입
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    topic:
+      dlt:
+        suffix: .DLT # DLQ 토픽 접미사
+    listener:
+      retry:
+        attempts: 3   # 총 시도 횟수 (최초 1 + 재시도 2)
+        interval: 1000 # 재시도 간격 (ms)

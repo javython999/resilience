@@ -34,6 +34,7 @@ public class MailSenderService {
         }
 
         smtpClient.sendEmail(email);
+        log.info("메일 전송 성공: {}", email);
 
         this.sentEmails.add(email);
         log.info("성공 목록에 추가됨: {}, 현재 목록 크기: {}", email, sentEmails.size());

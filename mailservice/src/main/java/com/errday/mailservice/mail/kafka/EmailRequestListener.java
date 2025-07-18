@@ -1,10 +1,14 @@
 package com.errday.mailservice.mail.kafka;
 
+import com.errday.mailservice.exception.InvalidEmailException;
+import com.errday.mailservice.exception.RetryableException;
 import com.errday.mailservice.mail.EmailRequest;
 import com.errday.mailservice.mail.MailSenderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -12,38 +16,129 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class EmailRequestListener {
 
+
+    private static final String ORIGINAL_TOPIC = "email-send-requests";
+    private static final String DLT_SUFFIX = ".DLT"; // KafkaListenerConfig의 suffix와 동일하게
+    private static final String DLT_TOPIC = ORIGINAL_TOPIC + DLT_SUFFIX;
+    private static final String DLT_GROUP_ID = "${spring.kafka.consumer.group-id}" + DLT_SUFFIX; // 원본 그룹 ID + .DLT
+
     private final MailSenderService mailSenderService;
 
     @KafkaListener(
-            topics = "email-send-requests", // 토픽 이름을 직접 사용하거나 상수로 관리
-            groupId = "${spring.kafka.consumer.group-id}", // application.yml의 group-id 사용
-            containerFactory = "kafkaListenerContainerFactory" // 기본값 사용 시 생략 가능
+            topics = ORIGINAL_TOPIC, // 원본 토픽 구독
+            groupId = "${spring.kafka.consumer.group-id}",
+            containerFactory = "kafkaListenerContainerFactory" // 새로 정의해준 팩토리 사용
     )
-    public void consumeEmailRequest(EmailRequest emailRequest) { // Kafka 메시지로부터 EmailRequest 객체를 받음
-        log.info("Received EmailRequest via Kafka: To={}, Body={}", emailRequest.getEmail(), emailRequest.getEmailBody());
-
-        if (emailRequest == null || emailRequest.getEmail() == null || emailRequest.getEmail().isEmpty()) {
-            log.warn("Received invalid EmailRequest (null or missing email): {}", emailRequest);
-            // TODO: 잘못된 메시지 처리 로직 (예: DLQ 전송)
-            return;
-        }
+    public void consumeEmailRequest(EmailRequest emailRequest) {
+        log.info("Kafka 통해 EmailRequest 수신: To={}, Body={}", emailRequest.getEmail(), emailRequest.getEmailBody());
 
         try {
-            // MailSenderService를 사용하여 이메일 발송 로직 호출
-            // MailController와 마찬가지로 email 주소만 전달하는 것으로 가정
-            log.info("Requesting email sending via MailSenderService for: {}", emailRequest.getEmail());
-
-            // MailSenderService의 sendEmail 메소드 호출 (이메일 주소 전달)
-            // 참고: Kafka 메시지에는 emailBody도 포함되어 있지만, 현재 MailSenderService는 email만 사용하는 것으로 보임
+            log.info("MailSenderService 통해 이메일 전송 요청: {}", emailRequest.getEmail());
             mailSenderService.sendEmail(emailRequest.getEmail());
+            log.info("이메일 요청 처리 성공: {}", emailRequest.getEmail());
 
-            log.info("Successfully requested email sending for: {}", emailRequest.getEmail());
+        } catch (RetryableException e) {
+            // 에러 핸들러가 재시도 후 DLT로 보내도록 예외를 다시 던집니다.
+            log.warn("이메일 처리 중 재시도 가능 오류 발생 (대상: {}): {}. Kafka 에러 핸들러를 트리거합니다.",
+                    emailRequest.getEmail(), e.getMessage());
+            // 예외를 다시 바깥으로 던져 ErrorHandler가 인지하도록 함
+            throw e;
+        } catch (InvalidEmailException e) {
+            // 재시도하지 않을 예외이기 때문에  ErrorHandler 설정에서 이 예외를 NonRetryable로 지정하고,
+            // ConditionalRecoverer에서 이 예외 타입일 경우 DLT로 보내지 않고 로그만 남기도록 구현해야 함.
+            // 리스너 코드 자체에서는 ErrorHandler를 트리거하기 위해 예외를 던져야 함.
+            log.error("잘못된 이메일 데이터 감지 (대상: {}): {}. 폐기 가능성이 있어 Kafka 에러 핸들러를 트리거합니다.",
+                    emailRequest.getEmail(), e.getMessage(), e);
+            throw e; // ErrorHandler가 NonRetryable로 인지하고 ConditionalRecoverer를 호출하도록 던짐
+        } catch (Exception e) {
+            // 에러 핸들러가 재시도 후 DLT로 보내도록 예외를 다시 던집니다.
+            log.error("이메일 처리 중 예상치 못한 오류 발생 (대상: {}): {}. Kafka 에러 핸들러를 트리거합니다.",
+                    emailRequest.getEmail(), e.getMessage(), e);
+
+            // 혹은 DLT 말고 아래처럼 알람을 받도록 처리할 수도 있습니다.
+            // 예: 모니터링 시스템에 이벤트 전송, 슬랙/이메일 알림 등
+            System.err.println("!!! 정의 안된 예외 발생: 개발팀 확인 필요 !!! " + e.getMessage());
+            // --- 알림 로직 끝 ---
+
+            // 정의 안된 예외이기 때문에 RuntimeException으로 감싸서 ErrorHandler가 처리하도록 던짐
+            throw new RuntimeException("Unexpected error during email processing", e);
+        }
+    }
+    // DLT 리스너: 실패한 메시지를 처리
+
+    @KafkaListener(
+            topics = DLT_TOPIC,         // DLT 토픽 구독
+            groupId = DLT_GROUP_ID,     // DLT 처리를 위한 별도 그룹 ID
+            containerFactory = "kafkaListenerContainerFactory" // 새로 정의해준 팩토리 사용
+    )
+    public void consumeDLTMessage(
+            // 1. 메시지 본문 (Payload)
+            EmailRequest failedRequest, // DLT 메시지 본문 (원본과 동일 타입 가정)
+
+            // 2. DLT 메시지 자체의 기본 헤더 정보
+            @Header(KafkaHeaders.RECEIVED_TOPIC) String dltTopic,         // 메시지를 수신한 토픽 (DLT 토픽 이름)
+            @Header(KafkaHeaders.RECEIVED_PARTITION) int dltPartition,    // 메시지를 수신한 DLT 파티션 ID
+            @Header(KafkaHeaders.OFFSET) long dltOffset,                 // DLT 토픽 내에서의 메시지 오프셋
+
+            // 3. 원본 메시지 정보 (DeadLetterPublishingRecoverer가 추가)
+            @Header(KafkaHeaders.DLT_ORIGINAL_TOPIC) String originalTopic, // 실패가 발생했던 원본 토픽 이름
+            @Header(KafkaHeaders.DLT_ORIGINAL_PARTITION) int originalPartition, // 원본 파티션 ID
+            @Header(KafkaHeaders.DLT_ORIGINAL_OFFSET) long originalOffset,     // 원본 오프셋
+
+            // 4. 실패 원인 정보 (DeadLetterPublishingRecoverer가 추가)
+            @Header(KafkaHeaders.DLT_EXCEPTION_FQCN) String exceptionFqcn,      // 실패 원인 예외의 전체 클래스 이름
+            @Header(KafkaHeaders.DLT_EXCEPTION_MESSAGE) String exceptionMessage, // 예외 메시지
+            @Header(KafkaHeaders.DLT_EXCEPTION_STACKTRACE) String stacktrace    // 예외 스택트레이스 문자열
+            // 필요하다면 다른 DLT 헤더 추가: DLT_ORIGINAL_TIMESTAMP, DLT_ORIGINAL_CONSUMER_GROUP 등
+    ) {
+        log.warn("===== DLT로부터 메시지 수신 =====");
+        log.warn("DLT 위치: topic={}, partition={}, offset={}", dltTopic, dltPartition, dltOffset);
+        log.warn("원본 위치: topic={}, partition={}, offset={}", originalTopic, originalPartition, originalOffset);
+        log.warn("실패한 요청 본문: {}", failedRequest);
+        log.warn("실패 예외: {}", exceptionFqcn); // 이제 SmtpConnectionException이 올바르게 로깅됨
+        log.warn("실패 메시지: {}", exceptionMessage);
+        log.debug("실패 스택트레이스:\n{}", stacktrace);
+        log.warn("-------------------------------------");
+
+        log.info("원본 오프셋 {}의 DLT 메시지 처리 시작", originalOffset);
+        try {
+            Class<?> exceptionClass = null;
+            boolean isRetryable = false;
+            boolean isInvalid = false;
+
+            try {
+                exceptionClass = Class.forName(exceptionFqcn);
+
+                // isAssignableFrom: exceptionClass가 RetryableException 이거나 그 하위 클래스인지 확인
+                isRetryable = RetryableException.class.isAssignableFrom(exceptionClass);
+                // isAssignableFrom: exceptionClass가 InvalidEmailException 이거나 그 하위 클래스인지 확인
+                isInvalid = InvalidEmailException.class.isAssignableFrom(exceptionClass);
+
+            } catch (ClassNotFoundException e) {
+                log.error("DLT 메시지 처리 중 예외 클래스를 찾을 수 없습니다: {}", exceptionFqcn, e);
+                // 클래스를 찾지 못하면 일단 예상치 못한 오류로 처리하거나, FQCN 문자열 기반으로 다시 시도할 수도 있음
+            }
+
+            if (isInvalid) {
+                // 데이터 문제: 수정 불가 시 영구 실패 처리 또는 알림
+                log.error("[DLT-조치] 원본 오프셋 {}에서 잘못된 데이터 감지 (타입: {}). 자동 재처리 불가. 알림을 발송합니다.", originalOffset, exceptionFqcn);
+                // sendAlert("Invalid data in DLT", failedRequest, exceptionMessage);
+            } else if (isRetryable) { // 이제 SmtpConnectionException도 이 분기로 들어옴
+                // 일시적 문제였을 수 있음: 제한적으로 재시도 고려 또는 수동 처리 요청
+                log.warn("[DLT-조치] 원본 오프셋 {}에서 재시도 가능 예외 감지 (타입: {}). 수동 재시도 또는 확인이 필요합니다.", originalOffset, exceptionFqcn);
+                // (주의) 재시도 로직 ...
+            } else {
+                // 예상 못한 오류: 개발자 확인 필요
+                log.error("[DLT-조치] 원본 오프셋 {}에서 예상치 못한 예외 타입 {} 발생. 확인이 필요합니다.", originalOffset, exceptionFqcn);
+                // sendAlert("Unexpected error in DLT", failedRequest, exceptionMessage);
+            }
+
+            log.info("원본 오프셋 {}의 DLT 메시지 처리 완료", originalOffset);
 
         } catch (Exception e) {
-            // MailSenderService 호출 중 발생할 수 있는 예외 처리
-            log.error("Error requesting email sending for {}: {}", emailRequest.getEmail(), e.getMessage(), e);
-            // TODO: 예외 처리 및 재시도 또는 DLQ 전송 로직
-            // throw new RuntimeException("Email processing failed", e); // 필요시 예외를 다시 던져 Kafka 재시도 유발
+            log.error("!!! 중요(CRITICAL): 원본 오프셋 {}의 DLT 메시지 처리 중 예외 발생: {}", originalOffset, e.getMessage(), e);
+            // sendCriticalAlert("DLT Processing failed!", e);
         }
+        log.warn("=====================================");
     }
 }

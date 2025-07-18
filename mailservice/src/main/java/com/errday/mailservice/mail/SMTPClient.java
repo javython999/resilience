@@ -16,7 +16,7 @@ public class SMTPClient {
 
     public void sendEmail(String email) {
 
-        if (random.nextDouble() < 0.0) {
+        if (random.nextDouble() < 0.9) {
             log.error("SMTP 연결 실패: 서버에 접속할 수 없습니다.");
             throw new SmtpConnectionException("SMTP 연결 실패: 서버에 접속할 수 없습니다.");
         }
