@@ -9,13 +9,16 @@ import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class MailSenderService {
 
     private final SMTPClient smtpClient;
-    private final MailSenderServiceHelper mailSenderServiceHelper = new MailSenderServiceHelper(this);
+    private final List<String> sentEmails = new CopyOnWriteArrayList<>();
 
     @Retryable(
             retryFor = {RetryableException.class}, // 재시도할 예외 유형
@@ -31,6 +34,9 @@ public class MailSenderService {
         }
 
         smtpClient.sendEmail(email);
+
+        this.sentEmails.add(email);
+        log.info("성공 목록에 추가됨: {}, 현재 목록 크기: {}", email, sentEmails.size());
     }
 
     // 재시도를 모두 실패했을 때 실행되는 복구 메서드
@@ -44,6 +50,10 @@ public class MailSenderService {
     @Recover
     public void recover(RuntimeException exception, String email) {
         throw exception;
+    }
+
+    public List<String> getSentEmails() {
+        return List.copyOf(sentEmails);
     }
 
 }

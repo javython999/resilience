@@ -6,5 +6,7 @@ public interface MailServiceClient {
 
     //Mono<String> sendMail(String email);
 
-    String sendMail(String email);
+    //String sendMail(String email);
+
+    String sendMail(EmailRequest emailRequest);
 }

@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  kafka-1:
+    image: bitnami/kafka:4.0.0 # 현재 기준 최신버전
+    container_name: kafka-1
+    networks:
+      - kafka-net
+    ports:
+      - "29092:9093" # 외부 접속: Host 29092 -> Container 9093
+    volumes:
+      - kafka-1-data:/bitnami/kafka
+    environment:
+      KAFKA_ENABLE_KRAFT: 'yes'
+      KAFKA_CFG_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CFG_NODE_ID: 1
+      # --- 중요: 3개 노드 모두 쿼럼 보터로 지정 ---
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: '1@kafka-1:9091,2@kafka-2:9091,3@kafka-3:9091'
+      KAFKA_CFG_LISTENERS: 'PLAINTEXT://:9092,CONTROLLER://:9091,EXTERNAL://:9093'
+      KAFKA_CFG_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka-1:9092,EXTERNAL://localhost:29092'
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CLUSTER_ID: '{KAFKA_CLUSTER_ID}' # 위 명령어에서 나온 결과 붙여넣기
+      # --- 중요: 3개 노드이므로 복제 관련 설정 변경 ---
+      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      ALLOW_PLAINTEXT_LISTENER: 'yes'
+      KAFKA_BROKER_ID: 1
+
+  kafka-2:
+    image: bitnami/kafka:4.0.0
+    container_name: kafka-2
+    networks:
+      - kafka-net
+    ports:
+      - "29093:9093" # 외부 접속: Host 29093 -> Container 9093
+    volumes:
+      - kafka-2-data:/bitnami/kafka
+    environment:
+      KAFKA_ENABLE_KRAFT: 'yes'
+      KAFKA_CFG_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CFG_NODE_ID: 2 # 노드 ID 변경
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: '1@kafka-1:9091,2@kafka-2:9091,3@kafka-3:9091' # 동일
+      KAFKA_CFG_LISTENERS: 'PLAINTEXT://:9092,CONTROLLER://:9091,EXTERNAL://:9093'
+      KAFKA_CFG_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka-2:9092,EXTERNAL://localhost:29093' # 호스트 포트 변경
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CLUSTER_ID: '{KAFKA_CLUSTER_ID}' # 동일
+      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      ALLOW_PLAINTEXT_LISTENER: 'yes'
+      KAFKA_BROKER_ID: 2 # 노드 ID와 동일하게 변경
+
+  kafka-3:
+    image: bitnami/kafka:4.0.0
+    container_name: kafka-3
+    networks:
+      - kafka-net
+    ports:
+      - "29094:9093" # 외부 접속: Host 29094 -> Container 9093
+    volumes:
+      - kafka-3-data:/bitnami/kafka
+    environment:
+      KAFKA_ENABLE_KRAFT: 'yes'
+      KAFKA_CFG_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CFG_NODE_ID: 3 # 노드 ID 변경
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: '1@kafka-1:9091,2@kafka-2:9091,3@kafka-3:9091' # 동일
+      KAFKA_CFG_LISTENERS: 'PLAINTEXT://:9092,CONTROLLER://:9091,EXTERNAL://:9093'
+      KAFKA_CFG_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka-3:9092,EXTERNAL://localhost:29094' # 호스트 포트 변경
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CLUSTER_ID: '{KAFKA_CLUSTER_ID}' # 동일
+      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      ALLOW_PLAINTEXT_LISTENER: 'yes'
+      KAFKA_BROKER_ID: 3 # 노드 ID와 동일하게 변경
+
+networks:
+  kafka-net:
+    driver: bridge
+
+volumes:
+  kafka-1-data:
+  kafka-2-data:
+  kafka-3-data: # 볼륨 정의 추가

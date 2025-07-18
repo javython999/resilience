@@ -1,10 +1,10 @@
 package com.errday.mailservice.mail;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -24,6 +24,12 @@ public class MailController {
     public String sendMailAopDemo(@RequestBody EmailRequest emailRequest) {
         mailSenderServiceHelper.sendEmailForAopDemo(emailRequest.getEmail());
         return "메일 전송 요청이 접수되었습니다.";
+    }
+
+    @GetMapping("/list")
+    public ResponseEntity<List<String>> getSentMailList() {
+        List<String> sentEmails = mailSenderService.getSentEmails();
+        return ResponseEntity.ok(sentEmails);
     }
 
 }

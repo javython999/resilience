@@ -1,8 +1,10 @@
 package com.errday.mainservice.payment;
 
 import lombok.Getter;
+import lombok.ToString;
 
 @Getter
+@ToString
 public class PaymentResponse {
 
     private final String status;

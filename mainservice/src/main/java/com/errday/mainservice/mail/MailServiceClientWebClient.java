@@ -46,7 +46,7 @@ public class MailServiceClientWebClient implements MailServiceClient {
                 .bodyToMono(String.class);
     }*/
 
-    @Override
+    /*@Override
     //@RateLimiter(name = "MAIL_SERVICE_RL", fallbackMethod = "sendMailFallback")
     @Bulkhead(name = "MAIL_SERVICE_BH", fallbackMethod = "sendMailFallback")
     public String sendMail(String email) {
@@ -72,6 +72,35 @@ public class MailServiceClientWebClient implements MailServiceClient {
                         () -> new MailServiceTimeoutException("Timeout after " + DEFAULT_TIMEOUT + " for " + email))
                 )
                 .doOnSuccess(response -> log.debug("[Resilience] Successfully sent mail for {}", email))
+                .block();
+    }*/
+
+    @Override
+    //@RateLimiter(name = "MAIL_SERVICE_RL", fallbackMethod = "sendMailFallback")
+    @Bulkhead(name = "MAIL_SERVICE_BH", fallbackMethod = "sendMailFallback")
+    public String sendMail(EmailRequest emailRequest) {
+        log.debug("[Resilience] Attempting to send mail for email: {}", emailRequest.getEmail());
+        EmailRequest request = new EmailRequest(emailRequest.getEmail());
+
+        // WebClient 호출 및 결과 처리
+        // .block()을 사용하므로, 전체 메서드는 동기적으로 동작합니다.
+        // 완전한 비동기 처리를 원한다면 Mono<String>을 반환하도록 수정해야 합니다.
+        return webClient.post()
+                .uri(MAIL_SEND_URI) // 상수 사용
+                .bodyValue(request)
+                .retrieve()
+                .onStatus(status -> status.is5xxServerError(), clientResponse ->
+                        clientResponse.bodyToMono(String.class)
+                                .flatMap(errorBody -> {
+                                    log.warn("[Resilience] Mail service returned 5xx server error for {}: {}", emailRequest.getEmail(), errorBody);
+                                    return Mono.error(new MailSendException("Mail service server error: " + errorBody));
+                                })
+                )
+                .bodyToMono(String.class)
+                .timeout(DEFAULT_TIMEOUT, Mono.error(
+                        () -> new MailServiceTimeoutException("Timeout after " + DEFAULT_TIMEOUT + " for " + emailRequest.getEmail()))
+                )
+                .doOnSuccess(response -> log.debug("[Resilience] Successfully sent mail for {}", emailRequest.getEmail()))
                 .block();
     }
 

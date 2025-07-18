@@ -12,5 +12,9 @@ import lombok.Setter;
 public class EmailRequest {
 
     private String email;
+    private String emailBody;
 
+    public EmailRequest(String email) {
+        this.email = email;
+    }
 }

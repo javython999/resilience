@@ -1,6 +1,19 @@
 server:
   port: 8080
 
+spring:
+  kafka:
+    # Docker Compose에 설정된 외부 접속 포트 리스트
+    bootstrap-servers: localhost:29092,localhost:29093,localhost:29094
+    producer:
+      # 메시지 키와 값의 직렬화 방식 (필요에 따라 변경)
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        # ▼▼▼ 메시지에 타입 헤더 추가 안 함 설정 ▼▼▼
+        spring.json.add.type.headers: false
+      #acks: 1 # 1이 기본값, 0 혹은 all도 가능
+      acks: all # 1이 기본값, 0 혹은 all도 가능
 
 #resilience4j.circuitbreaker:
 #  instances:

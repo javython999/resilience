@@ -1,5 +1,7 @@
 package com.errday.mainservice.mail;
 
+import com.errday.mainservice.kafka.MailServiceKafkaProducer;
+import com.errday.mainservice.payment.PaymentResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -10,7 +12,9 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class MailService {
 
-    private final MailServiceClient mailServiceClient;
+    //private final MailServiceClient mailServiceClient;
+    private final MailServiceKafkaProducer mailServiceKafkaProducer;
+
 
     /*public Mono<String> sendMail(String email) {
         log.info("메일 발송 요청: {}", email);
@@ -25,8 +29,16 @@ public class MailService {
                 });
     }*/
 
-    public String sendMail(String email) {
+    /*public String sendMail(String email) {
         log.info("메일 발송 요청: {}", email);
         return mailServiceClient.sendMail(email);
+    }*/
+
+    public String sendMail(String email, PaymentResponse paymentResponse) {
+        log.info("메일 발송 요청: {}, {}", email, paymentResponse); // 요청 로그
+
+        EmailRequest emailRequest = new EmailRequest(email, paymentResponse.getMessage());
+
+        return mailServiceKafkaProducer.sendMail(emailRequest);
     }
 }
