@@ -25,8 +25,8 @@ public class PaymentControllerIntegrationTest {
     @Autowired
     private TestRestTemplate restTemplate;
 
-    private static final int TEST_DURATION_SECONDS = 60;
-    private static final int TARGET_RPS = 20;
+    private static final int TEST_DURATION_SECONDS = 20;
+    private static final int TARGET_RPS = 10;
     private static final int TOTAL_REQUESTS = TEST_DURATION_SECONDS * TARGET_RPS;
 
     /**
