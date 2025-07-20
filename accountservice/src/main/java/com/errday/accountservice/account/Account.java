@@ -28,11 +28,21 @@ public class Account {
     }
 
     public void withdraw(long amount) {
-        if (balance < amount) {
+        long currentBalance = balance;
+
+        if (currentBalance < amount) {
             throw new IllegalArgumentException("잔액이 부족합니다.");
         }
 
-        balance -= amount;
+        try {
+            System.out.println("[" + Thread.currentThread().getName() + "] 출금 시도. 현재 잔액:" + currentBalance);
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        balance = currentBalance - amount;
+        System.out.println("[" + Thread.currentThread().getName() + "] 출금 완료. 최종 잔액:" + currentBalance);
     }
 
     public void deposit(long amount) {
