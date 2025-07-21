@@ -22,9 +22,15 @@ public class Order {
 
     private LocalDateTime orderDate;
 
+    private String status;
+
     public Order(String productName, int quantity) {
         this.productName = productName;
         this.quantity = quantity;
         this.orderDate = LocalDateTime.now();
+    }
+
+    public void changeStatus(String status) {
+        this.status = status;
     }
 }

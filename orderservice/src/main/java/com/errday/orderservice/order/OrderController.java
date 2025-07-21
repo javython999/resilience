@@ -33,4 +33,11 @@ public class OrderController {
 
         return ResponseEntity.ok("주문 선공!");
     }
+
+    @PostMapping("/orders/saga-fail-test")
+    public ResponseEntity<String> createOrderWithSagaFail(@RequestBody OrderRequestDto request) {
+        orderService.placeOrderSaga(request);
+
+        return ResponseEntity.ok("주문 실패?");
+    }
 }

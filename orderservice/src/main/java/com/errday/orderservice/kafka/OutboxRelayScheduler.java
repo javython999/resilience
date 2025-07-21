@@ -37,6 +37,10 @@ public class OutboxRelayScheduler {
             try {
                 if ("STOCK_DECREASED".equals(event.getEventType())) {
                     kafkaProducerService.send("stock-decrease-topic", event.getPayload());
+                    log.info("☑️ [Relay] '재고 감소' 이벤트 발행 성공 (ID: {})", event.getId());
+                } else if ("STOCK_INCREASED".equals(event.getEventType())) {
+                    kafkaProducerService.send("stock-increase-topic", event.getPayload());
+                    log.info("☑️ [Relay] '재고 증가' 보상 이벤트 발행 성공 (ID: {})", event.getId());
                 }
 
                 event.changeStatus(OutboxEvent.EventStatus.PUBLISHED);
